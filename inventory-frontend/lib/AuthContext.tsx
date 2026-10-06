@@ -1,14 +1,21 @@
 'use client';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import api from '@/lib/api';
 import { isAuth } from '@/lib/auth';
-import type { User } from '@/lib/types';
+import type { User, Role } from '@/lib/types';
 
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
   refresh: () => Promise<void>;
   setUser: (u: User | null) => void;
+  can: (allowed: Role[]) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue>({
@@ -16,6 +23,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   refresh: async () => {},
   setUser: () => {},
+  can: () => false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -42,8 +50,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
   }, []);
 
+  const can = (allowed: Role[]) =>
+    !!user && allowed.includes(user.role);
+
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, refresh, setUser, can }}>
       {children}
     </AuthContext.Provider>
   );

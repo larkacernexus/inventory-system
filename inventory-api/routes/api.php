@@ -25,9 +25,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('categories', CategoryController::class)->except(['index', 'show']);
         Route::apiResource('products', ProductController::class)->except(['index', 'show']);
         Route::apiResource('stock-movements', StockMovementController::class)->only(['store']);
-    });
 
-    Route::middleware('role:admin')->group(function () {
         Route::apiResource('users', UserController::class);
     });
 });

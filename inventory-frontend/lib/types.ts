@@ -1,9 +1,12 @@
+export type Role = 'admin' | 'manager' | 'staff';
+
 export interface User {
   id: number;
   name: string;
   email: string;
-  role?: 'admin' | 'manager' | 'staff';
-  is_active?: boolean;
+  role: Role;
+  is_active: boolean;
+  created_at?: string;
 }
 
 export interface Category {

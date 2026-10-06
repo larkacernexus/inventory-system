@@ -2,11 +2,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
+import { useAuth } from '@/lib/AuthContext';
+import type { Role } from '@/lib/types';
 
 type NavItem = {
   href: string;
   label: string;
   icon: ReactNode;
+  roles?: Role[]; // omitted = visible to all
 };
 
 const nav: NavItem[] = [
@@ -49,6 +52,7 @@ const nav: NavItem[] = [
   {
     href: '/users',
     label: 'Users',
+    roles: ['admin', 'manager'],
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 100-6 3 3 0 000 6z" />
@@ -62,7 +66,6 @@ type SidebarProps = {
   onToggle: () => void;
   onClose?: () => void;
   onLogout: () => void;
-  /** Render as overlay (mobile). Hides the collapse button. */
   isMobile?: boolean;
 };
 
@@ -74,11 +77,32 @@ export default function Sidebar({
   isMobile = false,
 }: SidebarProps) {
   const path = usePathname();
+  const { user } = useAuth();
 
   const isActive = (href: string) =>
     href === '/dashboard' ? path === href : path.startsWith(href);
 
+  const visibleNav = nav.filter((n) => {
+    if (!n.roles) return true;
+    return user && n.roles.includes(user.role);
+  });
+
   const width = collapsed ? 'w-20' : 'w-64';
+
+  const initials = user?.name
+    ? user.name
+        .split(' ')
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : '??';
+
+  const roleLabel: Record<Role, string> = {
+    admin: 'Administrator',
+    manager: 'Manager',
+    staff: 'Staff',
+  };
 
   return (
     <aside
@@ -102,7 +126,6 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Desktop collapse toggle */}
         {!isMobile && (
           <button
             onClick={onToggle}
@@ -111,9 +134,7 @@ export default function Sidebar({
             title={collapsed ? 'Expand' : 'Collapse'}
           >
             <svg
-              className={`w-4 h-4 transition-transform duration-300 ${
-                collapsed ? 'rotate-180' : ''
-              }`}
+              className={`w-4 h-4 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -123,7 +144,6 @@ export default function Sidebar({
           </button>
         )}
 
-        {/* Mobile close button */}
         {isMobile && onClose && (
           <button
             onClick={onClose}
@@ -140,11 +160,9 @@ export default function Sidebar({
       {/* Nav */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto overflow-x-hidden">
         {!collapsed && (
-          <p className="px-3 text-[10px] uppercase tracking-wider text-slate-500 mb-2">
-            Menu
-          </p>
+          <p className="px-3 text-[10px] uppercase tracking-wider text-slate-500 mb-2">Menu</p>
         )}
-        {nav.map((n) => {
+        {visibleNav.map((n) => {
           const active = isActive(n.href);
           return (
             <Link
@@ -176,20 +194,20 @@ export default function Sidebar({
       {/* User card + logout */}
       <div className="border-t border-slate-800 p-3 shrink-0">
         <div
-          className={`flex items-center gap-3 px-2 py-2 rounded-lg ${
-            collapsed ? 'justify-center' : ''
-          }`}
+          className={`flex items-center gap-3 px-2 py-2 rounded-lg ${collapsed ? 'justify-center' : ''}`}
         >
           <div
             className="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-xs font-semibold"
-            title={collapsed ? 'Admin User' : undefined}
+            title={collapsed ? user?.name ?? '' : undefined}
           >
-            AD
+            {initials}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-white truncate">Admin User</p>
-              <p className="text-[11px] text-slate-400 truncate">admin@example.com</p>
+              <p className="text-sm font-medium text-white truncate">{user?.name ?? '—'}</p>
+              <p className="text-[11px] text-slate-400 truncate">
+                {user ? roleLabel[user.role] : ''}
+              </p>
             </div>
           )}
         </div>

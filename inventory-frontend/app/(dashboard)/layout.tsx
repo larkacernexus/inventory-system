@@ -4,8 +4,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { isAuth, logout } from '@/lib/auth';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Sidebar from './sidebar';
+import type { Role } from '@/lib/types';
 
 const STORAGE_KEY = 'sidebar:collapsed';
+
+// Routes each role is allowed to visit
+const ROUTE_ACCESS: Array<{ prefix: string; roles: Role[] }> = [
+  { prefix: '/users', roles: ['admin', 'manager'] },
+];
 
 function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
@@ -17,19 +23,20 @@ function Shell({ children }: { children: ReactNode }) {
 
   // Auth guard
   useEffect(() => {
-    if (!isAuth()) router.push('/login');
+    if (!isAuth()) router.replace('/login');
     else setReady(true);
   }, [router]);
 
-  // Role guard: only admin can view /users
+  // Role guard
   useEffect(() => {
     if (!user) return;
-    if (path.startsWith('/users') && user.role !== 'admin') {
+    const rule = ROUTE_ACCESS.find((r) => path.startsWith(r.prefix));
+    if (rule && !rule.roles.includes(user.role)) {
       router.replace('/dashboard');
     }
   }, [user, path, router]);
 
-  // Restore desktop collapse preference
+  // Restore collapse preference
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setCollapsed(localStorage.getItem(STORAGE_KEY) === '1');
@@ -45,12 +52,10 @@ function Shell({ children }: { children: ReactNode }) {
     });
   };
 
-  // Auto-close mobile drawer on route change
   useEffect(() => {
     setMobileOpen(false);
   }, [path]);
 
-  // Esc closes mobile drawer
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMobileOpen(false);
@@ -105,7 +110,7 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {/* Content area */}
+      {/* Content */}
       <div
         className={`flex flex-col min-h-screen transition-[padding] duration-300 ease-in-out ${
           collapsed ? 'lg:pl-20' : 'lg:pl-64'

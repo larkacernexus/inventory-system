@@ -1,20 +1,39 @@
 'use client';
 import { useEffect, useState, FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import type { User } from '@/lib/types';
+import { useAuth } from '@/lib/AuthContext';
+import type { User, Role } from '@/lib/types';
 
 export default function UsersPage() {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  // Only admin + manager can be here
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
+
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
 
-  const load = () =>
+  // Client-side guard: bounce non-admin/manager
+  useEffect(() => {
+    if (user && !canManage) router.replace('/dashboard');
+  }, [user, canManage, router]);
+
+  const load = () => {
+    if (!canManage) return;
     api.get('/users', { params: { search } }).then((r) => setUsers(r.data.data));
+  };
 
   useEffect(() => {
     load();
-  }, [search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, canManage]);
+
+  // Don't render anything until we know the user's role
+  if (!user || !canManage) return null;
 
   const save = async (form: any) => {
     if (editing) await api.put(`/users/${editing.id}`, form);
@@ -49,7 +68,6 @@ export default function UsersPage() {
     },
   };
 
-  // Initials avatar helper
   const initials = (name?: string) =>
     (name ?? '')
       .split(' ')
@@ -67,6 +85,21 @@ export default function UsersPage() {
     'from-cyan-500 to-cyan-600',
   ];
   const colorFor = (id: number) => avatarColors[id % avatarColors.length];
+
+  // ─── Per-row permission check ───────────────────────────────
+  // Admin: can edit/delete anyone (except self-delete, gated below)
+  // Manager: can only edit/delete staff
+  // Staff: never here
+  const canEditRow = (row: User) => {
+    if (user.role === 'admin') return true;
+    if (user.role === 'manager') return row.role === 'staff';
+    return false;
+  };
+
+  const canDeleteRow = (row: User) => {
+    if (user.id === row.id) return false; // never delete self
+    return canEditRow(row);
+  };
 
   return (
     <div className="space-y-6">
@@ -141,8 +174,12 @@ export default function UsersPage() {
                   </td>
                 </tr>
               )}
-              {users.map((u: any) => {
+              {users.map((u) => {
                 const role = roleStyles[u.role] ?? roleStyles.staff;
+                const editable = canEditRow(u);
+                const deletable = canDeleteRow(u);
+                const isSelf = u.id === user.id;
+
                 return (
                   <tr key={u.id} className="hover:bg-slate-50/60 transition">
                     <td className="px-4 py-3">
@@ -154,6 +191,11 @@ export default function UsersPage() {
                         </div>
                         <span className="font-medium text-slate-900">
                           {u.name}
+                          {isSelf && (
+                            <span className="ml-2 text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                              You
+                            </span>
+                          )}
                         </span>
                       </div>
                     </td>
@@ -180,29 +222,37 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditing(u);
-                            setShowForm(true);
-                          }}
-                          className="p-1.5 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition"
-                          title="Edit"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => del(u.id)}
-                          className="p-1.5 rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" />
-                          </svg>
-                        </button>
-                      </div>
+                      {editable || deletable ? (
+                        <div className="flex items-center gap-1">
+                          {editable && (
+                            <button
+                              onClick={() => {
+                                setEditing(u);
+                                setShowForm(true);
+                              }}
+                              className="p-1.5 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                              title="Edit"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          )}
+                          {deletable && (
+                            <button
+                              onClick={() => del(u.id)}
+                              className="p-1.5 rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition"
+                              title="Delete"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a2 2 0 012-2h2a2 2 0 012 2v3" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -215,6 +265,7 @@ export default function UsersPage() {
       {showForm && (
         <UserForm
           initial={editing}
+          currentUser={user}
           onCancel={() => {
             setShowForm(false);
             setEditing(null);
@@ -226,14 +277,33 @@ export default function UsersPage() {
   );
 }
 
-function UserForm({ initial, onCancel, onSave }: any) {
+function UserForm({
+  initial,
+  currentUser,
+  onCancel,
+  onSave,
+}: {
+  initial: User | null;
+  currentUser: User;
+  onCancel: () => void;
+  onSave: (payload: any) => void;
+}) {
+  const isSelf = !!initial && initial.id === currentUser.id;
+  const canAssignAdmin = currentUser.role === 'admin';
+
+  // Coerced to a strict boolean — was `boolean | null`
+  const lockedRole =
+    currentUser.role === 'manager' &&
+    !!initial &&
+    initial.role !== 'staff';
+
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     email: initial?.email ?? '',
     password: '',
     password_confirmation: '',
-    role: (initial as any)?.role ?? 'staff',
-    is_active: (initial as any)?.is_active ?? true,
+    role: (initial?.role ?? 'staff') as Role,
+    is_active: initial?.is_active ?? true,
   });
 
   const submit = (e: FormEvent) => {
@@ -247,7 +317,7 @@ function UserForm({ initial, onCancel, onSave }: any) {
   };
 
   const inputClass =
-    'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 bg-white transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 outline-none';
+    'w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 bg-white transition focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 outline-none disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed';
   const labelClass = 'block text-xs font-medium text-slate-600 mb-1.5';
 
   return (
@@ -344,13 +414,24 @@ function UserForm({ initial, onCancel, onSave }: any) {
               <label className={labelClass}>Role</label>
               <select
                 value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                disabled={isSelf || lockedRole}
+                onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
                 className={inputClass}
               >
-                <option value="admin">Admin</option>
+                {canAssignAdmin && <option value="admin">Admin</option>}
                 <option value="manager">Manager</option>
                 <option value="staff">Staff</option>
               </select>
+              {isSelf && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  You can't change your own role.
+                </p>
+              )}
+              {lockedRole && !isSelf && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Managers can only manage staff accounts.
+                </p>
+              )}
             </div>
 
             <div>
